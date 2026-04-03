@@ -1,32 +1,4 @@
-# Ageing Report – Python dependencies
-# Install with:  pip install -r requirements.txt
-
-# ── Web UI (FastAPI stack) ───────────────────────────────────────────────────
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-python-multipart>=0.0.9   # required for FastAPI file uploads
-jinja2>=3.1.4
-
-# ── Legacy Streamlit UI (app.py still works if preferred) ───────────────────
 streamlit>=1.32.0
-
-# ── Excel generation ────────────────────────────────────────────────────────
 openpyxl>=3.1.2
-
-# ── PDF parsing (primary) ───────────────────────────────────────────────────
 pdfplumber>=0.10.3
-
-# ── PDF parsing (fallback – pdfplumber depends on this anyway) ──────────────
-pdfminer.six>=20221105
-
-# ── Data display in Streamlit preview table ─────────────────────────────────
 pandas>=2.0.0
-
-# ── Optional: pypdf as second fallback for PDF text extraction ───────────────
-pypdf>=3.17.0
-
-# ── Pillow: required by pdfplumber for image handling ───────────────────────
-Pillow>=10.0.0
-
-# ── Testing ──────────────────────────────────────────────────────────────────
-pytest>=7.4.0

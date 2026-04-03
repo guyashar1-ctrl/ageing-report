@@ -1,384 +1,138 @@
 """
-app.py
-======
-Streamlit web application for the Ageing Report system.
-
-Workflow
---------
-1.  User uploads a ZIP archive (or enters a folder path) containing the
-    Uniform Structure files (BKMVDATA.TXT and friends).
-2.  User uploads the 331 PDF report.
-3.  User enters the header code (e.g., 1342).
-4.  User clicks "אשר / Confirm".
-5.  The system processes the data and offers a downloadable Excel file.
-
-Run with:
-    streamlit run ageing_report/app.py
-or (from the ageing_report/ directory):
-    streamlit run app.py
+app.py - ממשק Streamlit לדוח גיול לקוחות
+==========================================
 """
 
-from __future__ import annotations
-
-import os
-import sys
-import tempfile
-from pathlib import Path
-
+import re
 import streamlit as st
+import pandas as pd
 
-# Ensure project root is on sys.path regardless of working directory
-_HERE = Path(__file__).parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
+from ageing_report.parsers.pdf_parser import parse_pdf_section
+from ageing_report.parsers.bkmv_parser import parse_b11_records, parse_b1_transactions
+from ageing_report.processors.aging_calculator import process_accounts
+from ageing_report.excel.excel_generator import generate_excel
+from ageing_report.utils.file_utils import extract_zip, find_bkmvdata, cleanup_temp_dir
 
-from config.constants import TARGET_YEAR
-from excel.excel_generator import generate_excel
-from parsers.bkmv_parser import parse_bkmvdata
-from parsers.report331_parser import parse_331_pdf
-from processors.balance_calculator import process_all_accounts
-from utils.file_utils import (
-    cleanup_temp_dir,
-    extract_zip,
-    find_bkmvdata,
-    validate_directory,
-    validate_file,
-)
-from utils.logger import clear_accumulated_logs, get_accumulated_logs, get_logger
-
-log = get_logger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Page configuration
-# ---------------------------------------------------------------------------
-
+# --- הגדרת עמוד ---
 st.set_page_config(
-    page_title="Ageing Report – גיול חשבונות",
+    page_title="דוח גיול לקוחות",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed",
 )
 
-# Inject right-to-left CSS for the entire page
-st.markdown(
-    """
-    <style>
-    body, .stApp { direction: rtl; }
-    .stTextInput > label,
-    .stFileUploader > label,
-    .stButton > button { direction: rtl; }
-    h1, h2, h3 { direction: rtl; }
-    .stAlert { direction: rtl; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# --- RTL CSS ---
+st.markdown("""
+<style>
+    .stApp { direction: rtl; }
+    .stMarkdown, .stText, .stAlert { direction: rtl; text-align: right; }
+    h1, h2, h3 { text-align: center; }
+    .stDataFrame { direction: ltr; }
+</style>
+""", unsafe_allow_html=True)
 
+st.title("דוח גיול לקוחות")
+st.markdown("---")
 
-# ---------------------------------------------------------------------------
-# Header
-# ---------------------------------------------------------------------------
+# --- שדות קלט ---
+col1, col2, col3 = st.columns(3)
 
-st.title("📊 מערכת גיול חשבונות")
-st.markdown(
-    "**קובץ מבנה אחיד** + **דו\"ח 331** → **קובץ Excel** עם נוסחאות SUM אמיתיות"
-)
-st.divider()
+with col1:
+    zip_file = st.file_uploader("קובץ מבנה אחיד (ZIP)", type=["zip"])
 
+with col2:
+    pdf_file = st.file_uploader("דוח 331 (PDF)", type=["pdf"])
 
-# ---------------------------------------------------------------------------
-# Input section
-# ---------------------------------------------------------------------------
+with col3:
+    section_code = st.text_input("קוד סעיף", value="1342", help="לדוגמה: 1342, 1302, 2660")
 
-col_left, col_right = st.columns([1, 1])
+st.markdown("---")
 
-with col_right:
-    st.subheader("1. קבצי מבנה אחיד")
-    input_method = st.radio(
-        "בחר שיטת קלט:",
-        options=["העלאת קובץ ZIP", "נתיב תיקייה"],
-        horizontal=True,
-        key="input_method",
-    )
-
-    zip_bytes: bytes | None = None
-    folder_path: str = ""
-
-    if input_method == "העלאת קובץ ZIP":
-        zip_file = st.file_uploader(
-            "העלה קובץ ZIP המכיל את קבצי המבנה האחיד",
-            type=["zip"],
-            key="zip_uploader",
-        )
-        if zip_file:
-            zip_bytes = zip_file.read()
-            st.success(f"ZIP נטען: {zip_file.name}  ({len(zip_bytes):,} bytes)")
+# --- כפתור הפקה ---
+if st.button("הפק דוח", type="primary", use_container_width=True):
+    if not zip_file:
+        st.error("יש להעלות קובץ מבנה אחיד (ZIP)")
+    elif not pdf_file:
+        st.error("יש להעלות דוח 331 (PDF)")
+    elif not section_code.strip():
+        st.error("יש להזין קוד סעיף")
     else:
-        folder_path = st.text_input(
-            "הזן נתיב מלא לתיקייה המכילה את קבצי המבנה האחיד",
-            placeholder=r"לדוגמה: C:\Accounting\2025\UniformStructure",
-            key="folder_path_input",
-        )
-        if folder_path:
-            if validate_directory(folder_path):
-                st.success(f"תיקייה נמצאה: {folder_path}")
-            else:
-                st.error(f"התיקייה לא נמצאה או אינה נגישה: {folder_path}")
-
-with col_left:
-    st.subheader("2. קובץ דו\"ח 331")
-    pdf_file = st.file_uploader(
-        "העלה את קובץ ה-PDF של דו\"ח 331",
-        type=["pdf"],
-        key="pdf_uploader",
-    )
-    if pdf_file:
-        st.success(f"PDF נטען: {pdf_file.name}  ({pdf_file.size:,} bytes)")
-
-st.divider()
-
-st.subheader("3. קוד כותרת מדו\"ח 331")
-header_code = st.text_input(
-    "הזן קוד כותרת (לדוגמה: 1342)",
-    placeholder="1342",
-    key="header_code_input",
-    max_chars=20,
-)
-
-st.divider()
-
-# ---------------------------------------------------------------------------
-# Validation and processing
-# ---------------------------------------------------------------------------
-
-confirm_clicked = st.button(
-    "✅ אשר ועבד",
-    type="primary",
-    key="confirm_btn",
-    disabled=(
-        (zip_bytes is None and not folder_path.strip()) or
-        pdf_file is None or
-        not header_code.strip()
-    ),
-)
-
-if confirm_clicked:
-    clear_accumulated_logs()
-    tmp_dir = None
-
-    progress = st.progress(0, text="מתחיל עיבוד…")
-
-    try:
-        # ----------------------------------------------------------------
-        # Step 1: Resolve working directory
-        # ----------------------------------------------------------------
-        progress.progress(10, text="מאתר קבצי מבנה אחיד…")
-
-        if zip_bytes:
-            tmp_dir = extract_zip(zip_bytes)
-            working_dir = tmp_dir
-            st.info(f"ZIP חולץ לתיקייה זמנית: {working_dir}")
-        else:
-            working_dir = folder_path.strip()
-            if not validate_directory(working_dir):
-                st.error(f"התיקייה '{working_dir}' אינה תקינה.")
-                st.stop()
-
-        # ----------------------------------------------------------------
-        # Step 2: Find BKMVDATA
-        # ----------------------------------------------------------------
-        bkmvdata_path = find_bkmvdata(working_dir)
-        if not bkmvdata_path:
-            st.error(
-                "לא נמצא קובץ BKMVDATA.TXT בתיקייה.  "
-                "וודא שהקובץ קיים (או שם מקביל כגון TXT.BKMVDATA) "
-                "ונסה שוב."
-            )
-            st.stop()
-
-        st.info(f"נמצא BKMVDATA: `{bkmvdata_path}`")
-
-        # ----------------------------------------------------------------
-        # Step 3: Save PDF to temp file
-        # ----------------------------------------------------------------
-        pdf_bytes = pdf_file.read()
-        with tempfile.NamedTemporaryFile(
-            suffix=".pdf", delete=False, prefix="report331_"
-        ) as pdf_tmp:
-            pdf_tmp.write(pdf_bytes)
-            pdf_path = pdf_tmp.name
-
-        # ----------------------------------------------------------------
-        # Step 4: Parse BKMVDATA
-        # ----------------------------------------------------------------
-        progress.progress(25, text="מפרסר קבצי מבנה אחיד…")
-        with st.spinner("מפרסר BKMVDATA.TXT…"):
-            bkmv = parse_bkmvdata(bkmvdata_path)
-
-        st.success(
-            f"BKMVDATA: {len(bkmv.accounts):,} חשבונות, "
-            f"{len(bkmv.movements):,} תנועות "
-            f"({len(bkmv.movements_target_year):,} בשנת {TARGET_YEAR})"
-        )
-        if bkmv.warnings:
-            with st.expander(f"⚠ {len(bkmv.warnings)} אזהרות פרסור BKMVDATA"):
-                for w in bkmv.warnings[:20]:
-                    st.warning(w)
-
-        # ----------------------------------------------------------------
-        # Step 5: Parse 331 PDF
-        # ----------------------------------------------------------------
-        progress.progress(45, text="מפרסר דו\"ח 331…")
-        with st.spinner("מפרסר PDF של דו\"ח 331…"):
-            report = parse_331_pdf(pdf_path, header_code.strip())
-
-        if report.header_name:
-            st.success(
-                f"כותרת נמצאה: **{header_code} – {report.header_name}** "
-                f"({len(report.accounts)} חשבונות)"
-            )
-        else:
-            st.warning(
-                f"קוד הכותרת '{header_code}' לא נמצא בדו\"ח 331.  "
-                f"בדוק שהקוד נכון."
-            )
-
-        if report.warnings:
-            with st.expander(f"⚠ {len(report.warnings)} אזהרות פרסור PDF"):
-                for w in report.warnings:
-                    st.warning(w)
-
-        if not report.accounts:
-            st.error("לא נמצאו חשבונות תחת הכותרת שנבחרה.  בדוק קוד כותרת וקובץ PDF.")
-            st.stop()
-
-        # ----------------------------------------------------------------
-        # Step 6: Calculate balances
-        # ----------------------------------------------------------------
-        progress.progress(65, text="מחשב גיול חשבונות…")
-        with st.spinner("מחשב יתרות וסיכומי ח/ז…"):
-            results = process_all_accounts(report.accounts, bkmv)
-
-        not_found  = sum(1 for r in results if not r.selected_movements
-                         and abs(r.closing_balance) > 0.005)
-        with_warn  = sum(1 for r in results if r.warnings)
-        total_accs = len(results)
-
-        st.success(
-            f"עובדו {total_accs} חשבונות | "
-            f"{with_warn} עם אזהרות | "
-            f"{not_found} ללא תנועות"
-        )
-
-        # ----------------------------------------------------------------
-        # Step 7: Generate Excel
-        # ----------------------------------------------------------------
-        progress.progress(80, text="מייצר קובץ Excel…")
-        with st.spinner("מייצר Excel עם נוסחאות SUM…"):
-            excel_bytes = generate_excel(
-                results=results,
-                bkmv=bkmv,
-                header_code=header_code.strip(),
-                header_name=report.header_name,
-            )
-
-        progress.progress(100, text="הושלם!")
-
-        # ----------------------------------------------------------------
-        # Step 8: Download button
-        # ----------------------------------------------------------------
-        st.divider()
-        st.subheader("📥 הורדת קובץ Excel")
-
-        filename = f"Ageing_{header_code.strip()}_{TARGET_YEAR}.xlsx"
-
-        st.download_button(
-            label=f"⬇ הורד קובץ Excel – {filename}",
-            data=excel_bytes,
-            file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_excel",
-        )
-
-        # Preview table
-        with st.expander("👁 תצוגה מקדימה של תוצאות"):
-            import pandas as pd
-            preview_data = []
-            for r in results:
-                preview_data.append({
-                    "מספר חשבון": r.account_number,
-                    "שם חשבון":   r.account_name,
-                    "יתרה נוכחית": r.closing_balance,
-                    "יתרה פתיחה":  r.opening_balance,
-                    "סכום ח/ז":    r.selected_sum,
-                    "תאריך תחילת חוב": (
-                        r.debt_start_date.strftime("%d/%m/%Y")
-                        if r.debt_start_date else ""
-                    ),
-                    "הערות": "; ".join(r.warnings[:1]) if r.warnings else "",
-                })
-            df = pd.DataFrame(preview_data)
-            st.dataframe(df, use_container_width=True)
-
-    except Exception as exc:
-        log.exception("Unhandled error during processing")
-        st.error(f"שגיאה לא צפויה: {exc}")
-        st.exception(exc)
-
-    finally:
-        # Clean up temp PDF
+        temp_dir = None
         try:
-            if "pdf_path" in locals() and os.path.exists(pdf_path):
-                os.unlink(pdf_path)
-        except Exception:
-            pass
-        # Clean up extracted ZIP
-        if tmp_dir:
-            cleanup_temp_dir(tmp_dir)
+            progress = st.progress(0)
+            status = st.empty()
 
+            # שלב 1: PDF
+            status.info("קורא דוח 331...")
+            progress.progress(10)
+            pdf_accounts = parse_pdf_section(pdf_file, section_code.strip())
+            if not pdf_accounts:
+                st.error(f"לא נמצאו חשבונות בסעיף {section_code}")
+                st.stop()
+            progress.progress(25)
+            target_accounts = set(pdf_accounts.keys())
 
-# ---------------------------------------------------------------------------
-# Sidebar: help / field mapping notes
-# ---------------------------------------------------------------------------
+            # שלב 2: חילוץ ZIP
+            status.info("מחלץ קובץ מבנה אחיד...")
+            progress.progress(30)
+            temp_dir = extract_zip(zip_file)
+            bkmv_path = find_bkmvdata(temp_dir)
+            if not bkmv_path:
+                st.error("לא נמצא קובץ BKMVDATA.TXT בתוך ה-ZIP")
+                st.stop()
+            progress.progress(35)
 
-with st.sidebar:
-    st.header("ℹ עזרה")
-    st.markdown(
-        """
-**זרימת עבודה:**
-1. העלה ZIP עם קבצי מבנה אחיד **או** הזן נתיב תיקייה
-2. העלה PDF של דו"ח 331
-3. הזן קוד כותרת (לדוגמה: 1342)
-4. לחץ "אשר ועבד"
-5. הורד את קובץ ה-Excel
+            # שלב 3: B11
+            status.info("קורא כרטיסיות חשבון...")
+            b11_data = parse_b11_records(bkmv_path, target_accounts)
+            progress.progress(50)
 
----
-**מבנה קובץ ה-Excel:**
-- **ריכוז** – שורה לכל חשבון עם נוסחת SUM
-- **תנועות נבחרות** – תנועות שנבחרו לנוסחה
-- **כל התנועות** – ביקורת מלאה
-- **לוג שגיאות** – אזהרות ושגיאות
+            # שלב 4: B1
+            status.info("קורא תנועות יומן...")
+            transactions = parse_b1_transactions(bkmv_path, target_accounts)
+            progress.progress(65)
 
----
-**כיצד לשנות מיפוי שדות?**
+            # שלב 5: חישוב גיול
+            status.info("מחשב גיול...")
+            results = process_accounts(pdf_accounts, b11_data, transactions)
+            progress.progress(80)
 
-ערוך את הקובץ:
-`config/field_mappings.py`
+            # שלב 6: Excel
+            status.info("מייצר קובץ Excel...")
+            excel_bytes = generate_excel(results)
+            progress.progress(100)
+            status.success("הדוח מוכן!")
 
-שנה את המספרים ב-`B100_FIELDS`
-ו-`C100_FIELDS` בהתאם למיקום
-האמיתי של כל שדה בקובץ שלך.
-        """
-    )
+            # --- סיכום ---
+            st.markdown("### סיכום")
+            debit_count = sum(1 for r in results if r['closing'] > 0.005)
+            credit_count = sum(1 for r in results if r['closing'] < -0.005)
+            with_date = sum(1 for r in results if re.match(r'\d{2}/\d{2}/\d{4}', r['debt_start_date']))
+            total_closing = sum(r['closing'] for r in results)
 
-    st.divider()
-    log_records = get_accumulated_logs()
-    if log_records:
-        st.markdown(f"**לוג: {len(log_records)} רשומות**")
-        errors = [r for r in log_records if r[0] in ("ERROR", "CRITICAL")]
-        warnings = [r for r in log_records if r[0] == "WARNING"]
-        if errors:
-            st.error(f"{len(errors)} שגיאות")
-        if warnings:
-            st.warning(f"{len(warnings)} אזהרות")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("חשבונות", len(results))
+            c2.metric("יתרות חובה", debit_count)
+            c3.metric("יתרות זכות", credit_count)
+            c4.metric("סה\"כ יתרות", f"{total_closing:,.2f}")
+
+            # --- תצוגה מקדימה ---
+            st.markdown("### תצוגה מקדימה")
+            df = pd.DataFrame(results)
+            df.columns = ['מספר חשבון', 'שם חשבון', 'יתרה נוכחית', 'יתרת פתיחה', 'תאריך תחילת חוב', 'פירוט סכימה']
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            # --- הורדה ---
+            st.download_button(
+                label="הורד קובץ Excel",
+                data=excel_bytes,
+                file_name=f"דוח_גיול_{section_code}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True,
+            )
+
+        except Exception as e:
+            st.error(f"שגיאה: {e}")
+        finally:
+            if temp_dir:
+                cleanup_temp_dir(temp_dir)
