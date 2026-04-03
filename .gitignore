@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Output files (generated, not source)
+ageing_report/output/*.xlsx
+ageing_report/output/*.log
+ageing_report/output/~$*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+New Text Document.txt
+
+# Claude Code
+.claude/

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html class="light" dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>מערכת גיול יתרות</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Heebo:wght@300;400;500;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary-fixed-dim": "#c2d4ff",
+            "on-primary-fixed-variant": "#0058ba",
+            "on-tertiary-fixed": "#37354f",
+            "surface-container-low": "#f0f4f6",
+            "primary-fixed": "#d8e2ff",
+            "outline": "#727c80",
+            "error": "#9f403d",
+            "on-surface-variant": "#566164",
+            "tertiary-fixed-dim": "#cac6e6",
+            "secondary-fixed": "#cfe6f2",
+            "tertiary-dim": "#53506b",
+            "on-tertiary-fixed-variant": "#54516d",
+            "surface-container-lowest": "#ffffff",
+            "inverse-primary": "#4a8eff",
+            "surface-dim": "#cfdce0",
+            "surface-container": "#e9eff1",
+            "on-tertiary": "#fcf7ff",
+            "inverse-on-surface": "#9a9d9e",
+            "primary-container": "#d8e2ff",
+            "on-error-container": "#752121",
+            "on-tertiary-container": "#4a4863",
+            "on-secondary-fixed-variant": "#495f69",
+            "surface": "#f8fafb",
+            "on-primary-container": "#004fa8",
+            "on-secondary-container": "#40555f",
+            "on-error": "#fff7f6",
+            "secondary-dim": "#415660",
+            "on-primary-fixed": "#003d85",
+            "surface-container-highest": "#d9e4e8",
+            "secondary": "#4d626c",
+            "surface-variant": "#d9e4e8",
+            "tertiary-container": "#d8d3f4",
+            "tertiary": "#5f5c78",
+            "secondary-container": "#cfe6f2",
+            "secondary-fixed-dim": "#c1d8e4",
+            "on-secondary": "#f2faff",
+            "surface-tint": "#005bc0",
+            "inverse-surface": "#0b0f10",
+            "on-surface": "#2a3437",
+            "tertiary-fixed": "#d8d3f4",
+            "outline-variant": "#a9b4b7",
+            "on-primary": "#f7f7ff",
+            "surface-bright": "#f8fafb",
+            "on-secondary-fixed": "#2d424c",
+            "error-dim": "#4e0309",
+            "on-background": "#2a3437",
+            "primary": "#005bc0",
+            "error-container": "#fe8983",
+            "surface-container-high": "#e1eaec",
+            "background": "#f8fafb",
+            "primary-dim": "#004fa9"
+          },
+          fontFamily: {
+            "headline": ["Heebo", "Inter", "sans-serif"],
+            "body":     ["Heebo", "Inter", "sans-serif"],
+            "label":    ["Heebo", "Inter", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Heebo', 'Inter', sans-serif;
+      background-color: #f8fafb;
+      color: #2a3437;
+      min-height: max(884px, 100dvh);
+    }
+    .glass-panel {
+      background: rgba(248, 250, 251, 0.8);
+      backdrop-filter: blur(20px);
+    }
+    .signature-gradient {
+      background: linear-gradient(135deg, #005bc0 0%, #004fa9 100%);
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    /* Drop zone active state */
+    .drop-active {
+      border-color: #005bc0 !important;
+      background-color: #d8e2ff20 !important;
+    }
+    /* File selected state */
+    .file-selected .upload-icon-wrap { background-color: #d8e2ff !important; }
+    .file-selected .upload-icon      { color: #005bc0 !important; }
+    .file-selected .upload-hint      { color: #005bc0; font-weight: 600; }
+
+    /* Loading overlay */
+    #loadingOverlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(248,250,251,0.85);
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+    #loadingOverlay.active { display: flex; }
+
+    /* Spinner */
+    .spinner {
+      width: 56px; height: 56px;
+      border: 5px solid #d8e2ff;
+      border-top-color: #005bc0;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toast notification */
+    #toast {
+      position: fixed; bottom: 5rem; left: 50%; transform: translateX(-50%);
+      z-index: 9998; min-width: 320px; max-width: 90vw;
+      display: none; padding: 1rem 1.5rem;
+      border-radius: 0.5rem; font-size: 0.95rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      transition: opacity 0.3s;
+    }
+    #toast.show   { display: flex; align-items: center; gap: 0.75rem; }
+    #toast.error  { background: #fe8983; color: #2a3437; }
+    #toast.success{ background: #d8e2ff; color: #003d85; }
+
+    /* Folder path toggle */
+    #folderSection { display: none; }
+    #folderSection.visible { display: block; }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+  <!-- ── TopAppBar ──────────────────────────────────────────────────────── -->
+  <header class="fixed top-0 w-full z-50 bg-slate-50/80 dark:bg-slate-900/80
+                 backdrop-blur-md border-b border-slate-200 dark:border-slate-800
+                 shadow-sm flex items-center justify-between px-6 h-16">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center justify-center w-10 h-10 rounded-lg
+                  bg-primary/10 text-blue-700">
+        <span class="material-symbols-outlined">account_balance</span>
+      </div>
+      <h1 class="text-xl font-bold tracking-tighter text-slate-900 font-['Heebo']">
+        מערכת גיול יתרות
+      </h1>
+    </div>
+
+    <nav class="hidden md:flex items-center gap-8">
+      <a class="text-blue-700 font-bold font-['Inter'] transition-colors" href="#">
+        מערכת גיול יתרות
+      </a>
+      <a class="text-slate-600 hover:bg-slate-100 transition-colors px-3 py-2
+                rounded-md cursor-pointer font-['Inter']" href="#">
+        דוחות קודמים
+      </a>
+      <a class="text-slate-600 hover:bg-slate-100 transition-colors px-3 py-2
+                rounded-md cursor-pointer font-['Inter']" href="#">
+        הגדרות
+      </a>
+    </nav>
+
+    <div class="flex items-center gap-4">
+      <div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center
+                  justify-center text-on-surface-variant cursor-pointer active:opacity-80">
+        <span class="material-symbols-outlined text-sm">notifications</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ──────────────────────────────────────────────────────────── -->
+  <main class="flex-grow pt-24 pb-12 px-6 max-w-5xl mx-auto w-full">
+
+    <!-- Page Header -->
+    <section class="mb-12">
+      <h2 class="text-4xl font-extrabold tracking-tight text-on-surface mb-2 font-headline">
+        מערכת גיול יתרות
+      </h2>
+      <p class="text-on-surface-variant text-lg">
+        ניהול ועיבוד נתוני גבייה וגיול חובות באופן אדריכלי ומדויק.
+      </p>
+    </section>
+
+    <!-- Bento Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+
+      <!-- ── Info Card ──────────────────────────────────────────────── -->
+      <div class="md:col-span-4 flex flex-col gap-6">
+        <div class="bg-surface-container p-8 rounded-xl relative overflow-hidden
+                    flex flex-col h-full border-l-4 border-primary">
+          <h3 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant
+                     mb-4 font-label">
+            מידע על התהליך
+          </h3>
+          <div class="space-y-4">
+            <div class="flex gap-4">
+              <span class="material-symbols-outlined text-primary flex-shrink-0">info</span>
+              <p class="text-sm text-on-surface leading-relaxed">
+                העלו את הקבצים הנדרשים והזינו קוד כותרת כדי להתחיל בתהליך הגיול.
+              </p>
+            </div>
+            <div class="flex gap-4">
+              <span class="material-symbols-outlined text-tertiary flex-shrink-0">description</span>
+              <p class="text-sm text-on-surface leading-relaxed">
+                עם סיום העיבוד, המערכת תייצר קובץ <strong>Excel</strong> מפורט
+                הכולל ניתוח גיול מלא עם נוסחאות SUM אמיתיות.
+              </p>
+            </div>
+            <div class="flex gap-4">
+              <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">folder_zip</span>
+              <p class="text-sm text-on-surface leading-relaxed">
+                קובץ המבנה האחיד מתקבל כ-<strong>ZIP</strong> או כנתיב תיקייה מקומי.
+              </p>
+            </div>
+          </div>
+          <div class="mt-auto pt-8">
+            <div class="bg-surface-container-low p-4 rounded-lg">
+              <p class="text-xs text-on-surface-variant italic">
+                הקבצים נשמרים בסביבה מאובטחת ומוצפנת בלבד.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Input Form ─────────────────────────────────────────────── -->
+      <div class="md:col-span-8 space-y-6">
+        <form id="processForm" enctype="multipart/form-data" novalidate>
+
+          <!-- Header Code -->
+          <div class="bg-surface-container-lowest p-8 rounded-xl shadow-sm">
+            <label class="block text-xs font-bold uppercase tracking-widest
+                          text-on-surface-variant mb-3 font-label"
+                   for="header_code">
+              קוד כותרת
+            </label>
+            <div class="relative group">
+              <input
+                id="header_code"
+                name="header_code"
+                type="text"
+                placeholder="הזן קוד כותרת..."
+                autocomplete="off"
+                class="w-full bg-surface-container-highest border-none border-b-2
+                       border-outline-variant focus:border-primary
+                       focus:bg-surface-container-lowest focus:ring-0
+                       transition-all py-4 px-4 text-lg font-medium rounded-lg"
+              />
+              <div class="absolute inset-y-0 left-4 flex items-center
+                          text-outline-variant group-focus-within:text-primary
+                          pointer-events-none">
+                <span class="material-symbols-outlined">key</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Upload Areas -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- Report 331 (PDF) -->
+            <div>
+              <input type="file" id="pdf_file" name="pdf_file"
+                     accept=".pdf" class="hidden"/>
+              <label for="pdf_file"
+                     id="pdfDropZone"
+                     class="bg-surface-container-lowest p-8 rounded-xl shadow-sm
+                            flex flex-col gap-4 border-2 border-dashed
+                            border-outline-variant/30 hover:border-primary/50
+                            transition-colors cursor-pointer group block">
+                <div class="upload-icon-wrap w-16 h-16 rounded-full
+                            bg-surface-container-low flex items-center justify-center
+                            mb-2 group-hover:bg-primary-container transition-colors">
+                  <span class="material-symbols-outlined text-4xl text-on-surface-variant
+                               group-hover:text-primary upload-icon">
+                    upload_file
+                  </span>
+                </div>
+                <div>
+                  <h4 class="text-xl font-bold text-on-surface font-headline">דוח 331</h4>
+                  <p class="upload-hint text-on-surface-variant text-sm mt-1">
+                    גרור לכאן או לחץ לבחירת קובץ
+                  </p>
+                </div>
+                <div class="mt-auto flex items-center gap-2 text-xs font-bold">
+                  <span class="material-symbols-outlined text-sm text-primary">check_circle</span>
+                  <span id="pdfLabel" class="text-primary">תמיכה בפורמט PDF</span>
+                </div>
+              </label>
+            </div>
+
+            <!-- Uniform Structure (ZIP or folder) -->
+            <div class="flex flex-col gap-3">
+              <input type="file" id="bkmv_file" name="bkmv_file"
+                     accept=".zip" class="hidden"/>
+              <label for="bkmv_file"
+                     id="bkmvDropZone"
+                     class="bg-surface-container-lowest p-8 rounded-xl shadow-sm
+                            flex flex-col gap-4 border-2 border-dashed
+                            border-outline-variant/30 hover:border-primary/50
+                            transition-colors cursor-pointer group block">
+                <div class="upload-icon-wrap w-16 h-16 rounded-full
+                            bg-surface-container-low flex items-center justify-center
+                            mb-2 group-hover:bg-primary-container transition-colors">
+                  <span class="material-symbols-outlined text-4xl text-on-surface-variant
+                               group-hover:text-primary upload-icon">
+                    clinical_notes
+                  </span>
+                </div>
+                <div>
+                  <h4 class="text-xl font-bold text-on-surface font-headline">
+                    קובץ מבנה אחיד
+                  </h4>
+                  <p class="upload-hint text-on-surface-variant text-sm mt-1">
+                    גרור לכאן או לחץ לבחירת קובץ
+                  </p>
+                </div>
+                <div class="mt-auto flex items-center gap-2 text-xs font-bold">
+                  <span class="material-symbols-outlined text-sm text-primary">check_circle</span>
+                  <span id="bkmvLabel" class="text-primary">תמיכה בפורמט ZIP</span>
+                </div>
+              </label>
+
+              <!-- Folder path toggle -->
+              <button type="button" id="toggleFolder"
+                      class="text-xs text-on-surface-variant hover:text-primary
+                             underline underline-offset-2 text-right transition-colors">
+                או הזן נתיב תיקייה מקומי ▾
+              </button>
+              <div id="folderSection">
+                <input type="text" id="folder_path" name="folder_path"
+                       placeholder="לדוגמה: C:\Accounting\2025\UniformStructure"
+                       class="w-full bg-surface-container-highest border border-outline-variant/50
+                              focus:border-primary focus:ring-0 rounded-lg px-4 py-3 text-sm
+                              font-medium transition-all"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-4">
+            <button id="submitBtn" type="submit"
+                    class="signature-gradient w-full py-5 rounded-lg text-white
+                           font-bold text-xl shadow-lg hover:shadow-xl
+                           hover:scale-[1.01] active:scale-100 transition-all
+                           flex items-center justify-center gap-4
+                           disabled:opacity-60 disabled:cursor-not-allowed
+                           disabled:scale-100">
+              <span id="submitText">אשר ועבד</span>
+              <span class="material-symbols-outlined" id="submitIcon">analytics</span>
+            </button>
+          </div>
+
+          <!-- Debug Panel (shown when no accounts found) -->
+          <div id="debugPanel"
+               class="hidden mt-6 bg-surface-container border border-outline-variant/30
+                      rounded-xl p-6 flex flex-col gap-3">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-2xl text-on-surface-variant">
+                bug_report
+              </span>
+              <h4 class="font-bold text-on-surface font-headline">
+                אבחון פרסור – שורות שזוהו בדוח 331
+              </h4>
+            </div>
+            <p class="text-sm text-on-surface-variant">
+              המערכת לא מצאה חשבונות תחת הכותרת שנבחרה.
+              להלן כל הכותרות שזוהו בקובץ ה-PDF.
+              בדוק שקוד הכותרת שהוזן תואם בדיוק לאחד מהקודים הבאים:
+            </p>
+            <div id="debugHeaders"
+                 class="bg-surface-container-lowest rounded-lg p-4 text-sm font-mono
+                        max-h-48 overflow-y-auto text-on-surface leading-relaxed
+                        whitespace-pre-wrap dir-ltr text-left"></div>
+            <details class="text-sm">
+              <summary class="cursor-pointer text-on-surface-variant hover:text-primary
+                              font-bold py-1">
+                פירוט מלא (30 שורות אחרי הכותרת)
+              </summary>
+              <div id="debugFull"
+                   class="mt-2 bg-surface-container-lowest rounded-lg p-4 font-mono
+                          max-h-72 overflow-y-auto text-xs text-on-surface
+                          whitespace-pre-wrap dir-ltr text-left"></div>
+            </details>
+          </div>
+
+          <!-- Success Card (hidden until processing succeeds) -->
+          <div id="successCard"
+               class="hidden mt-6 bg-primary-container border border-primary/20
+                      rounded-xl p-6 flex flex-col gap-4">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-3xl text-primary">
+                task_alt
+              </span>
+              <div>
+                <h4 class="font-bold text-on-primary-container text-lg font-headline">
+                  הקובץ נוצר ונפתח בהצלחה
+                </h4>
+                <p id="successSubtitle"
+                   class="text-sm text-on-primary-container/80 mt-0.5"></p>
+              </div>
+            </div>
+
+            <!-- File path display -->
+            <div class="bg-surface-container-lowest rounded-lg px-4 py-3
+                        flex items-center gap-3 text-sm font-mono
+                        text-on-surface-variant break-all">
+              <span class="material-symbols-outlined text-base text-primary flex-shrink-0">
+                folder_open
+              </span>
+              <span id="successPath"></span>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex flex-wrap gap-3 mt-1">
+              <button id="btnReopen"
+                      class="flex items-center gap-2 px-5 py-2.5 rounded-lg
+                             signature-gradient text-white font-bold text-sm
+                             hover:shadow-md transition-all">
+                <span class="material-symbols-outlined text-base">open_in_new</span>
+                פתח שוב ב-Excel
+              </button>
+              <a id="btnDownload" href="#"
+                 class="flex items-center gap-2 px-5 py-2.5 rounded-lg
+                        border-2 border-primary text-primary font-bold text-sm
+                        hover:bg-primary/5 transition-all">
+                <span class="material-symbols-outlined text-base">download</span>
+                הורד קובץ
+              </a>
+              <button id="btnNewRun"
+                      class="flex items-center gap-2 px-5 py-2.5 rounded-lg
+                             border border-outline-variant text-on-surface-variant
+                             font-bold text-sm hover:bg-surface-container transition-all">
+                <span class="material-symbols-outlined text-base">refresh</span>
+                עיבוד חדש
+              </button>
+            </div>
+
+            <!-- Warning if auto-open failed -->
+            <p id="openWarning"
+               class="hidden text-xs text-on-surface-variant bg-surface-container
+                      rounded-lg px-3 py-2">
+              <span class="material-symbols-outlined text-sm align-middle">
+                info
+              </span>
+              הקובץ לא נפתח אוטומטית — לחץ "פתח שוב ב-Excel" או "הורד קובץ".
+            </p>
+          </div>
+
+        </form><!-- /processForm -->
+      </div>
+    </div><!-- /grid -->
+
+    <!-- System Visualization -->
+    <section class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 opacity-60">
+      <div class="bg-surface p-6 rounded-lg border border-outline-variant/10">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="material-symbols-outlined text-primary">query_stats</span>
+          <span class="text-xs font-bold font-label uppercase tracking-wider">
+            סטטיסטיקת עיבוד
+          </span>
+        </div>
+        <div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+          <div class="h-full bg-primary w-2/3"></div>
+        </div>
+      </div>
+      <div class="bg-surface p-6 rounded-lg border border-outline-variant/10">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="material-symbols-outlined text-tertiary">database</span>
+          <span class="text-xs font-bold font-label uppercase tracking-wider">
+            נפח נתונים זמין
+          </span>
+        </div>
+        <div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+          <div class="h-full bg-tertiary w-1/2"></div>
+        </div>
+      </div>
+      <div class="bg-surface p-6 rounded-lg border border-outline-variant/10">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="material-symbols-outlined text-on-surface-variant">cloud_done</span>
+          <span class="text-xs font-bold font-label uppercase tracking-wider">
+            סנכרון ענן
+          </span>
+        </div>
+        <div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+          <div class="h-full bg-on-surface-variant w-full"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ────────────────────────────────────────────────────────── -->
+  <footer class="w-full py-8 mt-auto border-t border-slate-200
+                 bg-slate-50">
+    <div class="flex flex-col md:flex-row justify-between items-center
+                px-8 max-w-7xl mx-auto gap-4">
+      <div class="text-xs font-['Inter'] uppercase tracking-widest text-slate-500">
+        © 2024 Architectural Ledger Systems. All rights reserved.
+      </div>
+      <div class="flex gap-6">
+        <a class="text-xs font-['Inter'] uppercase tracking-widest text-slate-500
+                  hover:text-blue-700 transition-all duration-200" href="#">
+          Privacy Policy
+        </a>
+        <a class="text-xs font-['Inter'] uppercase tracking-widest text-slate-500
+                  hover:text-blue-700 transition-all duration-200" href="#">
+          Terms of Service
+        </a>
+        <a class="text-xs font-['Inter'] uppercase tracking-widest text-slate-500
+                  hover:text-blue-700 transition-all duration-200" href="#">
+          Documentation
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── Mobile Bottom Nav ─────────────────────────────────────────────── -->
+  <nav class="fixed bottom-0 left-0 right-0 h-16 md:hidden flex w-full
+              justify-around items-center z-50 bg-white/90
+              backdrop-blur-lg border-t border-slate-200
+              shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+    <div class="flex items-center justify-center flex-1 h-full
+                text-blue-700 scale-110">
+      <span class="material-symbols-outlined">dashboard</span>
+    </div>
+    <div class="flex items-center justify-center flex-1 h-full
+                text-slate-400 hover:bg-slate-50">
+      <span class="material-symbols-outlined">upload_file</span>
+    </div>
+    <div class="flex items-center justify-center flex-1 h-full
+                text-slate-400 hover:bg-slate-50">
+      <span class="material-symbols-outlined">analytics</span>
+    </div>
+  </nav>
+
+  <!-- ── Loading Overlay ───────────────────────────────────────────────── -->
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="text-center">
+      <p class="text-on-surface font-bold text-xl font-headline">מעבד נתונים...</p>
+      <p class="text-on-surface-variant text-sm mt-1">
+        מפרסר BKMVDATA, מחשב גיולים ומייצר Excel
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Toast Notification ────────────────────────────────────────────── -->
+  <div id="toast" role="alert">
+    <span class="material-symbols-outlined text-xl" id="toastIcon">error</span>
+    <span id="toastMsg"></span>
+    <button onclick="hideToast()" class="mr-auto text-inherit opacity-60 hover:opacity-100">
+      <span class="material-symbols-outlined text-base">close</span>
+    </button>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       JavaScript
+  ════════════════════════════════════════════════════════════════════ -->
+  <script>
+  (() => {
+
+    // ── File input + drag-and-drop ───────────────────────────────────
+    function setupFileInput(inputId, dropZoneId, labelId) {
+      const input    = document.getElementById(inputId);
+      const dropZone = document.getElementById(dropZoneId);
+      const label    = document.getElementById(labelId);
+
+      function applyFile(file) {
+        dropZone.classList.add('file-selected');
+        label.textContent = file.name;
+        dropZone.querySelector('.upload-hint').textContent = 'קובץ נבחר ✓';
+      }
+
+      input.addEventListener('change', () => {
+        if (input.files[0]) applyFile(input.files[0]);
+      });
+
+      ['dragenter','dragover'].forEach(evt =>
+        dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drop-active'); })
+      );
+      ['dragleave','drop'].forEach(evt =>
+        dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('drop-active'); })
+      );
+      dropZone.addEventListener('drop', e => {
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        applyFile(file);
+      });
+    }
+
+    setupFileInput('pdf_file',  'pdfDropZone',  'pdfLabel');
+    setupFileInput('bkmv_file', 'bkmvDropZone', 'bkmvLabel');
+
+    // ── Folder path toggle ───────────────────────────────────────────
+    const toggleBtn     = document.getElementById('toggleFolder');
+    const folderSection = document.getElementById('folderSection');
+    let folderVisible   = false;
+    toggleBtn.addEventListener('click', () => {
+      folderVisible = !folderVisible;
+      folderSection.classList.toggle('visible', folderVisible);
+      toggleBtn.textContent = folderVisible
+        ? 'סגור שדה נתיב תיקייה ▴'
+        : 'או הזן נתיב תיקייה מקומי ▾';
+    });
+
+    // ── State ────────────────────────────────────────────────────────
+    const form         = document.getElementById('processForm');
+    const submitBtn    = document.getElementById('submitBtn');
+    const submitTxt    = document.getElementById('submitText');
+    const submitIco    = document.getElementById('submitIcon');
+    const overlay      = document.getElementById('loadingOverlay');
+    const successCard  = document.getElementById('successCard');
+    const successSub   = document.getElementById('successSubtitle');
+    const successPath  = document.getElementById('successPath');
+    const openWarning  = document.getElementById('openWarning');
+    const btnReopen    = document.getElementById('btnReopen');
+    const btnDownload  = document.getElementById('btnDownload');
+    const btnNewRun    = document.getElementById('btnNewRun');
+    const debugPanel   = document.getElementById('debugPanel');
+    const debugHeaders = document.getElementById('debugHeaders');
+    const debugFull    = document.getElementById('debugFull');
+
+    let _lastFilename = null;
+
+    // ── Form submit ──────────────────────────────────────────────────
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const headerCode = document.getElementById('header_code').value.trim();
+      const pdfFile    = document.getElementById('pdf_file').files[0];
+      const bkmvFile   = document.getElementById('bkmv_file').files[0];
+      const folderPath = document.getElementById('folder_path').value.trim();
+
+      if (!headerCode) { showToast('error', 'יש להזין קוד כותרת'); return; }
+      if (!pdfFile)    { showToast('error', 'יש להעלות קובץ PDF של דוח 331'); return; }
+      if (!bkmvFile && !folderPath) {
+        showToast('error', 'יש להעלות קובץ ZIP או להזין נתיב תיקייה עבור המבנה האחיד');
+        return;
+      }
+
+      // Hide previous cards
+      successCard.classList.add('hidden');
+      debugPanel.classList.add('hidden');
+      _lastFilename = null;
+
+      // Show loading overlay
+      overlay.classList.add('active');
+      submitBtn.disabled = true;
+      submitTxt.textContent = 'מעבד...';
+      submitIco.textContent = 'hourglass_top';
+
+      try {
+        const resp = await fetch('/process', { method: 'POST', body: new FormData(form) });
+        const json = await resp.json();
+
+        if (!resp.ok || json.error) {
+          showToast('error', json.error || 'שגיאה בעיבוד הנתונים');
+          // Show debug panel if debug info is available
+          if (json.debug_lines && json.debug_lines.length) {
+            _showDebugPanel(json.debug_lines);
+          }
+          return;
+        }
+
+        // ── Success ──────────────────────────────────────────────────
+        _lastFilename = json.filename;
+
+        // Populate success card
+        successSub.textContent =
+          `${json.accounts} חשבונות עובדו תחת "${json.header_name}"`;
+        successPath.textContent = json.path;
+
+        // Wire buttons
+        btnDownload.href = `/download/${encodeURIComponent(json.filename)}`;
+        btnDownload.download = json.filename;
+
+        // Show/hide auto-open warning
+        openWarning.classList.toggle('hidden', json.opened !== false);
+
+        successCard.classList.remove('hidden');
+        successCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        if (json.opened) {
+          showToast('success', 'הקובץ נפתח ב-Excel — בדוק את שורת המשימות', 5000);
+        } else {
+          showToast('success', 'הקובץ נוצר — לחץ "פתח שוב" או "הורד"', 6000);
+        }
+
+      } catch (err) {
+        showToast('error', `שגיאת רשת: ${err.message}`);
+      } finally {
+        overlay.classList.remove('active');
+        submitBtn.disabled = false;
+        submitTxt.textContent = 'אשר ועבד';
+        submitIco.textContent = 'analytics';
+      }
+    });
+
+    // ── "פתח שוב" button ─────────────────────────────────────────────
+    btnReopen.addEventListener('click', async () => {
+      if (!_lastFilename) return;
+      btnReopen.disabled = true;
+      try {
+        const resp = await fetch(`/open/${encodeURIComponent(_lastFilename)}`,
+                                 { method: 'POST' });
+        const json = await resp.json();
+        if (json.opened) {
+          showToast('success', 'הקובץ נפתח — בדוק את שורת המשימות', 4000);
+          openWarning.classList.add('hidden');
+        } else {
+          showToast('error', 'לא ניתן לפתוח אוטומטית — השתמש בכפתור "הורד"');
+        }
+      } catch (err) {
+        showToast('error', `שגיאה: ${err.message}`);
+      } finally {
+        btnReopen.disabled = false;
+      }
+    });
+
+    // ── Debug panel helper ───────────────────────────────────────────
+    function _showDebugPanel(debugLines) {
+      // Separate header lines from full trace
+      const headerLines = debugLines.filter(l => l.includes('code=') || l.includes('Header'));
+      const fullLines   = debugLines;
+      debugHeaders.textContent = headerLines.join('\n') || '(אין כותרות שזוהו)';
+      debugFull.textContent    = fullLines.join('\n');
+      debugPanel.classList.remove('hidden');
+      debugPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // ── "עיבוד חדש" button ───────────────────────────────────────────
+    btnNewRun.addEventListener('click', () => {
+      successCard.classList.add('hidden');
+      debugPanel.classList.add('hidden');
+      _lastFilename = null;
+      form.reset();
+      // Reset drop zone visuals
+      ['pdfDropZone','bkmvDropZone'].forEach(id => {
+        const dz = document.getElementById(id);
+        dz.classList.remove('file-selected');
+        dz.querySelector('.upload-hint').textContent = 'גרור לכאן או לחץ לבחירת קובץ';
+      });
+      document.getElementById('pdfLabel').textContent  = 'תמיכה בפורמט PDF';
+      document.getElementById('bkmvLabel').textContent = 'תמיכה בפורמט ZIP';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // ── Toast helpers ────────────────────────────────────────────────
+    let _toastTimer = null;
+    window.showToast = function(type, message, duration = 7000) {
+      const toast  = document.getElementById('toast');
+      const msgEl  = document.getElementById('toastMsg');
+      const iconEl = document.getElementById('toastIcon');
+      toast.className = `show ${type}`;
+      msgEl.textContent  = message;
+      iconEl.textContent = type === 'error' ? 'error' : 'check_circle';
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(hideToast, duration);
+    };
+    window.hideToast = function() {
+      document.getElementById('toast').className = '';
+      clearTimeout(_toastTimer);
+    };
+
+  })();
+  </script>
+
+</body>
+</html>
