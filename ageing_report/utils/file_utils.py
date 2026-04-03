@@ -15,12 +15,13 @@ from ageing_report.config.constants import BKMVDATA_FILENAMES
 def extract_zip(uploaded_file):
     """
     חילוץ קובץ ZIP לתיקייה זמנית.
+    מחפש גם PDF בתוך ה-ZIP ומחזיר את הנתיב אליו.
 
     Args:
         uploaded_file: קובץ מ-Streamlit (UploadedFile) או נתיב
 
     Returns:
-        str: נתיב לתיקייה הזמנית
+        (temp_dir, pdf_path_inside): נתיב לתיקייה + נתיב ל-PDF אם נמצא (או None)
     """
     temp_dir = tempfile.mkdtemp(prefix="ageing_")
 
@@ -35,7 +36,17 @@ def extract_zip(uploaded_file):
     with zipfile.ZipFile(zip_path, 'r') as zf:
         zf.extractall(temp_dir)
 
-    return temp_dir
+    # חיפוש PDF בתוך ה-ZIP
+    pdf_path_inside = None
+    for root, _dirs, files in os.walk(temp_dir):
+        for fname in files:
+            if fname.lower().endswith('.pdf'):
+                pdf_path_inside = os.path.join(root, fname)
+                break
+        if pdf_path_inside:
+            break
+
+    return temp_dir, pdf_path_inside
 
 
 def find_bkmvdata(directory):
