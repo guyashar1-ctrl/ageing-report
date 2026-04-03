@@ -43,5 +43,11 @@ Thumbs.db
 *.swo
 New Text Document.txt
 
+# Data files (too large for GitHub)
+bkmv_data/
+*.zip
+*.xlsx
+*.pdf
+
 # Claude Code
 .claude/
