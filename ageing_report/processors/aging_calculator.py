@@ -26,11 +26,17 @@ def calculate_aging(closing, acct_txns, opening):
     sum_parts = []
 
     if closing > ZERO_THRESHOLD:
-        relevant = [(d, amt) for d, dc, amt in acct_txns if dc == '1' and amt > 0]
+        # יתרת חובה - סוכמים תנועות שמגדילות את החובה מהסוף להתחלה
+        # חובה רגילה (dc=1 חיובי) + היפוך זכות (dc=2 שלילי)
+        relevant = [(d, abs(amt)) for d, dc, amt in acct_txns
+                    if (dc == '1' and amt > 0) or (dc == '2' and amt < 0)]
         relevant.sort(key=lambda x: x[0], reverse=True)
         target = closing
     elif closing < -ZERO_THRESHOLD:
-        relevant = [(d, amt) for d, dc, amt in acct_txns if dc == '2' and amt > 0]
+        # יתרת זכות - סוכמים תנועות שמגדילות את הזכות מהסוף להתחלה
+        # זכות רגילה (dc=2 חיובי) + היפוך חובה (dc=1 שלילי)
+        relevant = [(d, abs(amt)) for d, dc, amt in acct_txns
+                    if (dc == '2' and amt > 0) or (dc == '1' and amt < 0)]
         relevant.sort(key=lambda x: x[0], reverse=True)
         target = abs(closing)
     else:
@@ -67,7 +73,10 @@ def process_accounts(pdf_accounts, b11_data, transactions):
         pdf_info = pdf_accounts[acct_num]
         b11 = b11_data.get(acct_num, {})
 
-        name = b11.get('name', pdf_info['name_visual'][::-1])
+        fallback_name = (pdf_info['name_visual'][::-1]
+            .replace('(', '\x00').replace(')', '(').replace('\x00', ')')
+            .replace('[', '\x00').replace(']', '[').replace('\x00', ']'))
+        name = b11.get('name', fallback_name)
         opening = b11.get('opening_balance', 0)
         total_debits = b11.get('total_debits', 0)
         total_credits = b11.get('total_credits', 0)

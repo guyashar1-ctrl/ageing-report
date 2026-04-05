@@ -35,7 +35,9 @@ def parse_b11_records(bkmv_path, target_accounts):
                 continue
 
             name_visual = d[37:87].strip()
-            name_logical = name_visual[::-1]
+            name_logical = (name_visual[::-1]
+                .replace('(', '\x00').replace(')', '(').replace('\x00', ')')
+                .replace('[', '\x00').replace(']', '[').replace('\x00', ']'))
 
             amts = re.findall(r'[+-]\d{14}', d[270:])
             opening = int(amts[0]) / 100 if len(amts) >= 1 else 0

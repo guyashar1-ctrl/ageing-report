@@ -27,6 +27,8 @@ def parse_pdf_section(pdf_path, section_code):
     pdf_accounts = {}
     section_total = None
 
+    section_code_pattern = re.compile(r'(?<!\d)' + re.escape(section_code) + r'(?!\d)')
+
     try:
         with pdfplumber.open(pdf_path) as pdf:
             in_section = False
@@ -35,12 +37,12 @@ def parse_pdf_section(pdf_path, section_code):
                 if not text:
                     continue
                 for line in text.split('\n'):
-                    if section_marker in line and 'כ"הס' not in line and not in_section:
+                    if section_code_pattern.search(line) and section_marker in line and 'כ"הס' not in line and not in_section:
                         in_section = True
                         continue
                     if in_section and SECTION_CONTINUE_MARKER in line:
                         continue
-                    if in_section and section_code in line and 'כ"הס' in line:
+                    if in_section and section_code_pattern.search(line) and 'כ"הס' in line:
                         # חילוץ סה"כ מהשורה הסוגרת
                         m = re.match(r'^([\d,]+\.\d{2})', line.strip())
                         if m:
